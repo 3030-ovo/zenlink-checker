@@ -56,12 +56,12 @@ h1{font-size:20px;font-weight:500;margin-bottom:6px;display:flex;align-items:cen
 .ss-badge{position:absolute;top:8px;right:8px;background:rgba(0,0,0,.5);color:#fff;font-size:10px;padding:3px 8px;border-radius:4px}
 .ss-note{font-size:11px;color:var(--text3);margin-top:6px;line-height:1.6}
 .ss-note a{color:var(--info-text)}
-.mock-wrap{background:rgba(0,0,0,.3);border-radius:var(--radius);padding:28px 16px;display:flex;align-items:center;justify-content:center}
-.mock-popup{background:#fff;border-radius:12px;padding:20px 22px;max-width:260px;width:100%;text-align:center}
-.mp-icon{font-size:28px;color:#185fa5;margin-bottom:8px}
-.mp-title{font-size:13px;font-weight:600;color:#111;margin-bottom:6px}
-.mp-body{font-size:11px;color:#666;line-height:1.6;margin-bottom:12px}
-.mp-btn{background:#185fa5;color:#fff;border:none;border-radius:7px;padding:9px 0;font-size:12px;font-weight:500;cursor:pointer;width:100%}
+
+
+
+
+
+
 </style>
 </head>
 <body>
@@ -213,19 +213,8 @@ function renderCard(url, analysis, platform) {
   const platHtml = platInfo
     ? `<div class="plat"><i class="fa-solid fa-laptop"></i>&nbsp;${platInfo.name}&nbsp;·&nbsp;<a href="${platInfo.guide}" target="_blank">タグ設置ガイド <i class="fa-solid fa-arrow-up-right-from-square" style="font-size:10px"></i></a></div>`
     : '';
-  const popupTab  = analysis.status === 'ok'
-    ? `<button class="tab" onclick="switchTab('${id}',2)"><i class="fa-solid fa-globe"></i>&nbsp;ポップアップ動作</button>` : '';
-  const popupPane = analysis.status === 'ok'
-    ? `<div class="tab-pane" id="${id}_p2">
-        <p style="font-size:12px;color:var(--text2);margin-bottom:8px">海外IPアクセス時のポップアップ表示イメージ（モック）</p>
-        <div class="mock-wrap"><div class="mock-popup">
-          <div class="mp-icon"><i class="fa-solid fa-cart-shopping"></i></div>
-          <div class="mp-title">海外からもご購入いただけます</div>
-          <div class="mp-body">ZenLinkを通じて、このショップの商品を世界各国へお届けします。</div>
-          <button class="mp-btn">購入ページへ進む</button>
-        </div></div>
-        <p class="ss-note" style="margin-top:8px">※実際の表示はショップ設定により異なります。ブラウザ上での実確認は <a href="https://www.browserling.com" target="_blank">Browserling</a> をご利用ください。</p>
-      </div>` : '';
+  const popupTab  = '';
+  const popupPane = '';
   const ssId = id + '_ssimg';
 
   const html = `<div class="result-card" id="${id}">
@@ -270,7 +259,7 @@ function renderCard(url, analysis, platform) {
   img.onerror = () => {
     wrap.innerHTML = '<span style="color:var(--warn-text);font-size:12px"><i class="fa-solid fa-triangle-exclamation"></i>&nbsp;スクリーンショットの取得に失敗しました</span>';
   };
-  img.src = `https://shot.screenshotapi.net/screenshot?token=${SS_TOKEN}&url=${encodeURIComponent(url)}&output=image&width=1280&height=800&delay=2500`;
+  img.src = `https://shot.screenshotapi.net/screenshot?token=${SS_TOKEN}&url=${encodeURIComponent(url)}&output=image&width=1280&height=800&delay=1000`;
 }
 
 async function runCheck() {
