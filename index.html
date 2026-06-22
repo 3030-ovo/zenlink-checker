@@ -28,8 +28,8 @@ h1{font-size:20px;font-weight:500;margin-bottom:6px;display:flex;align-items:cen
 .btn-check{height:44px;border:none;border-radius:var(--radius);background:var(--info-text);color:#fff;font-size:14px;font-weight:500;cursor:pointer;display:inline-flex;align-items:center;gap:8px;padding:0 22px;white-space:nowrap;transition:opacity .15s}
 .btn-check:hover{opacity:.88}
 .btn-check:disabled{opacity:.4;cursor:not-allowed}
-.results{margin-top:20px}
-.result-card{background:var(--bg);border:0.5px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;margin-bottom:12px}
+.results{margin-top:20px;display:flex;flex-direction:column;gap:12px}
+.result-card{background:var(--bg);border:0.5px solid var(--border);border-radius:var(--radius-lg);overflow:hidden}
 .rh{display:flex;align-items:flex-start;gap:10px;padding:16px 20px 14px}
 .badge{flex-shrink:0;font-size:11px;font-weight:600;padding:4px 12px;border-radius:20px;margin-top:2px;letter-spacing:.02em}
 .badge-ok{background:var(--ok-bg);color:var(--ok-text)}
@@ -85,21 +85,49 @@ h1{font-size:20px;font-weight:500;margin-bottom:6px;display:flex;align-items:cen
 const TARGET_SCRIPT = 'https://zen.one/analytics.js';
 const SS_TOKEN = 'EHT2X68-DG5M6MX-GDWFYBJ-S9PNSC5';
 
+const PROXIES = [
+  url => `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
+  url => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+  url => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+];
+
 const PLATFORMS = {
-  shopify:    {name:'Shopify',         guide:'https://support.zen.one/zenlink-guide/tag/shopify'},
-  base:       {name:'BASE',            guide:'https://support.zen.one/zenlink-guide/tag/base'},
-  ecforce:    {name:'ecforce',         guide:'https://support.zen.one/zenlink-guide/tag/ecforce'},
-  ochanoko:   {name:'おちゃのこネット',  guide:'https://support.zen.one/zenlink-guide/tag/ochanoko'},
-  makeshop:   {name:'Makeshop',        guide:'https://support.zen.one/zenlink-guide/tag/makeshop'},
-  futureshop: {name:'futureshop',      guide:'https://support.zen.one/zenlink-guide/tag/futureshop'},
-  colorme:    {name:'ColorMe',         guide:'https://support.zen.one/zenlink-guide/tag/colorme'},
-  square:     {name:'Square',          guide:'https://support.zen.one/zenlink-guide/tag/square'},
-  wix:        {name:'WIX',             guide:'https://support.zen.one/zenlink-guide/tag/wix'},
-  eccube:     {name:'EC-CUBE',         guide:'https://support.zen.one/zenlink-guide/tag/ec-cube'},
-  estore:     {name:'Eストアー',       guide:'https://support.zen.one/zenlink-guide/tag/estore'},
-  wordpress:  {name:'WordPress',       guide:'https://support.zen.one/zenlink-guide/tag/wordpress'},
-  aiship:     {name:'aiship',          guide:'https://support.zen.one/zenlink-guide/tag/aiship'},
+  shopify:    {name:'Shopify',        guide:'https://support.zen.one/zenlink-guide/tag/shopify'},
+  base:       {name:'BASE',           guide:'https://support.zen.one/zenlink-guide/tag/base'},
+  ecforce:    {name:'ecforce',        guide:'https://support.zen.one/zenlink-guide/tag/ecforce'},
+  ochanoko:   {name:'おちゃのこネット', guide:'https://support.zen.one/zenlink-guide/tag/ochanoko'},
+  makeshop:   {name:'Makeshop',       guide:'https://support.zen.one/zenlink-guide/tag/makeshop'},
+  futureshop: {name:'futureshop',     guide:'https://support.zen.one/zenlink-guide/tag/futureshop'},
+  colorme:    {name:'ColorMe',        guide:'https://support.zen.one/zenlink-guide/tag/colorme'},
+  square:     {name:'Square',         guide:'https://support.zen.one/zenlink-guide/tag/square'},
+  wix:        {name:'WIX',            guide:'https://support.zen.one/zenlink-guide/tag/wix'},
+  eccube:     {name:'EC-CUBE',        guide:'https://support.zen.one/zenlink-guide/tag/ec-cube'},
+  estore:     {name:'Eストアー',      guide:'https://support.zen.one/zenlink-guide/tag/estore'},
+  wordpress:  {name:'WordPress',      guide:'https://support.zen.one/zenlink-guide/tag/wordpress'},
+  aiship:     {name:'aiship',         guide:'https://support.zen.one/zenlink-guide/tag/aiship'},
 };
+
+// Fetch HTML via CORS proxy with fallbacks
+async function fetchHtml(url) {
+  for (const proxyFn of PROXIES) {
+    try {
+      const proxyUrl = proxyFn(url);
+      const resp = await fetch(proxyUrl, {signal: AbortSignal.timeout(10000)});
+      if (!resp.ok) continue;
+      const ct = resp.headers.get('content-type') || '';
+      // allorigins returns JSON wrapper
+      if (ct.includes('application/json')) {
+        const json = await resp.json();
+        const html = json.contents || '';
+        if (html.length > 100) return html;
+      } else {
+        const html = await resp.text();
+        if (html.length > 100) return html;
+      }
+    } catch(e) { continue; }
+  }
+  throw new Error('全てのプロキシで取得に失敗しました');
+}
 
 function detectPlatform(html) {
   const h = (html||'').toLowerCase();
@@ -122,59 +150,134 @@ function analyzeTag(html) {
   const issues = [];
   let status = 'ok';
   const h = html || '';
-  if(!h.toLowerCase().includes('zen.one/analytics')) {
+
+  if (!h.toLowerCase().includes('zen.one/analytics')) {
     issues.push('スクリプトタグが見つかりません（未挿入）');
-    return {status:'ng', issues};
+    return {status: 'ng', issues};
   }
+
   const scripts = [...h.matchAll(/<script[^>]*>/gi)].map(m => m[0]);
   const targets = scripts.filter(s => s.includes('analytics.js'));
-  if(targets.length === 0) {
-    issues.push('zen.one/analytics.jsへの参照はありますが、scriptタグの形式が不正です');
+
+  if (targets.length === 0) {
+    issues.push('zen.one/analytics.js への参照はありますが、script タグの形式が不正です');
     status = 'warn';
   }
+
   targets.forEach(tag => {
-    if(!tag.includes('async')) {
-      issues.push('async属性がありません（ページ表示速度に影響する可能性があります）');
-      if(status==='ok') status = 'warn';
+    if (!tag.includes('async')) {
+      issues.push('async 属性がありません（ページ表示速度に影響する可能性があります）');
+      if (status === 'ok') status = 'warn';
     }
     const m = tag.match(/src\s*=\s*["']([^"']+)["']/i);
-    if(m && m[1] !== TARGET_SCRIPT) {
-      issues.push(`src URLが正しくありません: ${m[1]}`);
-      if(status==='ok') status = 'warn';
+    if (m && m[1] !== TARGET_SCRIPT) {
+      issues.push(`src URL が正しくありません: ${m[1]}`);
+      if (status === 'ok') status = 'warn';
     }
   });
+
   const headMatch = h.match(/<head[\s\S]*?<\/head>/i);
-  if(headMatch) {
+  if (headMatch) {
     const hd = headMatch[0];
-    if(!hd.includes('analytics.js')) {
+    if (!hd.includes('analytics.js')) {
       issues.push('スクリプトが &lt;head&gt; 内ではなく body 等に挿入されています');
-      if(status==='ok') status = 'warn';
-    } else if(hd.lastIndexOf('</head>') - hd.lastIndexOf('analytics.js') > 2000) {
-      issues.push('スクリプトが &lt;head&gt; の上部に挿入されています（推奨: &lt;/head&gt; 直前）');
-      if(status==='ok') status = 'warn';
+      if (status === 'ok') status = 'warn';
+    } else if (hd.lastIndexOf('</head>') - hd.lastIndexOf('analytics.js') > 2000) {
+      issues.push('スクリプトが &lt;head&gt; の上部に挿入されています（推奨: &lt;/head&gt; の直前）');
+      if (status === 'ok') status = 'warn';
     }
   }
-  if(status==='ok') issues.push('正常: 推奨位置にスクリプトタグが確認できました');
+
+  if (status === 'ok') issues.push('正常: 推奨位置にスクリプトタグが確認できました');
   return {status, issues};
 }
 
 function cid(url) {
   let h = 0;
-  for(const c of url) h = Math.imul(31, h) + c.charCodeAt(0) | 0;
+  for (const c of url) h = Math.imul(31, h) + c.charCodeAt(0) | 0;
   return 'c' + Math.abs(h);
 }
 
 function switchTab(id, idx) {
   const card = document.getElementById(id);
-  card.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', i===idx));
-  card.querySelectorAll('.tab-pane').forEach((p,i) => p.classList.toggle('active', i===idx));
+  card.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', i === idx));
+  card.querySelectorAll('.tab-pane').forEach((p, i) => p.classList.toggle('active', i === idx));
+}
+
+function renderCard(url, analysis, platform) {
+  const id = cid(url);
+  const platInfo = platform ? PLATFORMS[platform] : null;
+  const bc = analysis.status==='ok' ? 'badge-ok' : analysis.status==='ng' ? 'badge-ng' : 'badge-warn';
+  const bl = analysis.status==='ok' ? 'OK — 正常' : analysis.status==='ng' ? 'NG — 未挿入' : 'WARN — 要確認';
+  const issuesHtml = analysis.issues.map(i => `<li>${i}</li>`).join('');
+  const platHtml = platInfo
+    ? `<div class="plat"><i class="fa-solid fa-laptop"></i>&nbsp;${platInfo.name}&nbsp;·&nbsp;<a href="${platInfo.guide}" target="_blank">タグ設置ガイド <i class="fa-solid fa-arrow-up-right-from-square" style="font-size:10px"></i></a></div>`
+    : '';
+  const popupTab  = analysis.status === 'ok'
+    ? `<button class="tab" onclick="switchTab('${id}',2)"><i class="fa-solid fa-globe"></i>&nbsp;ポップアップ動作</button>` : '';
+  const popupPane = analysis.status === 'ok'
+    ? `<div class="tab-pane" id="${id}_p2">
+        <p style="font-size:12px;color:var(--text2);margin-bottom:8px">海外IPアクセス時のポップアップ表示イメージ（モック）</p>
+        <div class="mock-wrap"><div class="mock-popup">
+          <div class="mp-icon"><i class="fa-solid fa-cart-shopping"></i></div>
+          <div class="mp-title">海外からもご購入いただけます</div>
+          <div class="mp-body">ZenLinkを通じて、このショップの商品を世界各国へお届けします。</div>
+          <button class="mp-btn">購入ページへ進む</button>
+        </div></div>
+        <p class="ss-note" style="margin-top:8px">※実際の表示はショップ設定により異なります。ブラウザ上での実確認は <a href="https://www.browserling.com" target="_blank">Browserling</a> をご利用ください。</p>
+      </div>` : '';
+  const ssId = id + '_ssimg';
+
+  const html = `<div class="result-card" id="${id}">
+    <div class="rh">
+      <span class="badge ${bc}">${bl}</span>
+      <div class="rurl"><a href="${url}" target="_blank">${url}</a></div>
+    </div>
+    <div class="rb">
+      <div class="tabs">
+        <button class="tab active" onclick="switchTab('${id}',0)"><i class="fa-solid fa-list-check"></i>&nbsp;診断結果</button>
+        <button class="tab" onclick="switchTab('${id}',1)"><i class="fa-solid fa-camera"></i>&nbsp;海外IPプレビュー</button>
+        ${popupTab}
+      </div>
+      <div class="tab-pane active" id="${id}_p0">
+        <ul class="issue-list">${issuesHtml}</ul>${platHtml}
+      </div>
+      <div class="tab-pane" id="${id}_p1">
+        <div class="ss-wrap" id="${ssId}"><i class="fa-solid fa-spinner fa-spin"></i>&nbsp;読み込み中...</div>
+        <p class="ss-note">米国サーバー経由のレンダリングです。ZenLinkが正常に動作していれば、海外ユーザー向けポップアップが表示されます。<br>実際のブラウザ確認は <a href="https://www.browserling.com" target="_blank">Browserling</a> もご利用ください。</p>
+      </div>
+      ${popupPane}
+    </div>
+  </div>`;
+
+  const existing = document.getElementById(id);
+  if (existing) existing.outerHTML = html;
+  else document.getElementById('results').insertAdjacentHTML('afterbegin', html);
+
+  // Load screenshot
+  const wrap = document.getElementById(ssId);
+  const img = new Image();
+  img.onload = () => {
+    wrap.innerHTML = '';
+    wrap.style.minHeight = '';
+    img.style.cssText = 'width:100%;display:block';
+    wrap.appendChild(img);
+    const badge = document.createElement('div');
+    badge.className = 'ss-badge';
+    badge.textContent = '米国サーバー経由';
+    wrap.appendChild(badge);
+  };
+  img.onerror = () => {
+    wrap.innerHTML = '<span style="color:var(--warn-text);font-size:12px"><i class="fa-solid fa-triangle-exclamation"></i>&nbsp;スクリーンショットの取得に失敗しました</span>';
+  };
+  img.src = `https://shot.screenshotapi.net/screenshot?token=${SS_TOKEN}&url=${encodeURIComponent(url)}&output=image&width=1280&height=800&delay=2500`;
 }
 
 async function runCheck() {
   const input = document.getElementById('urlInput');
   let url = input.value.trim();
-  if(!url) return;
-  if(!/^https?:\/\//i.test(url)) url = 'https://' + url;
+  if (!url) return;
+  if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
 
   const btn = document.getElementById('checkBtn');
   btn.disabled = true;
@@ -183,117 +286,30 @@ async function runCheck() {
   const id = cid(url);
   const results = document.getElementById('results');
 
-  // placeholder
+  // Placeholder card
   const placeholder = `<div class="result-card" id="${id}">
     <div class="rh">
-      <span class="badge badge-loading"><i class="fa-solid fa-spinner fa-spin"></i> 解析中</span>
+      <span class="badge badge-loading"><i class="fa-solid fa-spinner fa-spin"></i>&nbsp;解析中...</span>
       <div class="rurl"><a href="${url}" target="_blank">${url}</a></div>
     </div>
   </div>`;
   const existing = document.getElementById(id);
-  if(existing) existing.outerHTML = placeholder;
+  if (existing) existing.outerHTML = placeholder;
   else results.insertAdjacentHTML('afterbegin', placeholder);
 
   try {
-    const prompt = `Fetch this URL and return ONLY a valid JSON object with no markdown or extra text:
-URL: ${url}
-
-JSON fields needed:
-- "head_html": full <head>...</head> contents as string (up to 6000 chars)
-- "full_html_preview": first 3000 chars of page HTML
-- "script_tags": array of <script> tags containing "analytics.js"
-- "platform_hints": array of up to 5 CDN/generator hints from the HTML`;
-
-    const resp = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 1500,
-        tools: [{type: 'web_search_20250305', name: 'web_search'}],
-        messages: [{role: 'user', content: prompt}]
-      })
-    });
-    const data = await resp.json();
-    const text = data.content.filter(b => b.type==='text').map(b => b.text).join('');
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if(!jsonMatch) throw new Error('parse error');
-    const result = JSON.parse(jsonMatch[0]);
-
-    const combined = (result.head_html||'') + (result.full_html_preview||'') + (result.script_tags||[]).join(' ');
-    const analysis = analyzeTag(combined);
-    const platform = detectPlatform((result.platform_hints||[]).join(' ') + combined);
-    const platInfo = platform ? PLATFORMS[platform] : null;
-
-    const bc = analysis.status==='ok'?'badge-ok':analysis.status==='ng'?'badge-ng':'badge-warn';
-    const bl = analysis.status==='ok'?'OK — 正常':analysis.status==='ng'?'NG — 未挿入':'WARN — 要確認';
-    const issuesHtml = analysis.issues.map(i=>`<li>${i}</li>`).join('');
-    const platHtml = platInfo
-      ? `<div class="plat"><i class="fa-solid fa-laptop"></i>&nbsp;${platInfo.name}&nbsp;·&nbsp;<a href="${platInfo.guide}" target="_blank">タグ設置ガイド <i class="fa-solid fa-arrow-up-right-from-square" style="font-size:10px"></i></a></div>`
-      : '';
-    const popupTab = analysis.status==='ok'
-      ? `<button class="tab" onclick="switchTab('${id}',2)"><i class="fa-solid fa-globe"></i>&nbsp;ポップアップ動作</button>` : '';
-    const popupPane = analysis.status==='ok'
-      ? `<div class="tab-pane" id="${id}_p2">
-          <p style="font-size:12px;color:var(--text2);margin-bottom:8px">海外IPアクセス時のポップアップ表示イメージ（モック）</p>
-          <div class="mock-wrap"><div class="mock-popup">
-            <div class="mp-icon"><i class="fa-solid fa-cart-shopping"></i></div>
-            <div class="mp-title">海外からもご購入いただけます</div>
-            <div class="mp-body">ZenLinkを通じて、このショップの商品を世界各国へお届けします。</div>
-            <button class="mp-btn">購入ページへ進む</button>
-          </div></div>
-          <p class="ss-note" style="margin-top:8px">※実際の表示はショップ設定により異なります。実際のブラウザ確認は <a href="https://www.browserling.com" target="_blank">Browserling</a> をご利用ください。</p>
-        </div>` : '';
-
-    const ssImgId = id+'_ssimg';
-    const card = `<div class="result-card" id="${id}">
-      <div class="rh">
-        <span class="badge ${bc}">${bl}</span>
-        <div class="rurl"><a href="${url}" target="_blank">${url}</a></div>
-      </div>
-      <div class="rb">
-        <div class="tabs">
-          <button class="tab active" onclick="switchTab('${id}',0)"><i class="fa-solid fa-list-check"></i>&nbsp;診断結果</button>
-          <button class="tab" onclick="switchTab('${id}',1)"><i class="fa-solid fa-camera"></i>&nbsp;海外IPプレビュー</button>
-          ${popupTab}
-        </div>
-        <div class="tab-pane active" id="${id}_p0">
-          <ul class="issue-list">${issuesHtml}</ul>${platHtml}
-        </div>
-        <div class="tab-pane" id="${id}_p1">
-          <div class="ss-wrap" id="${ssImgId}"><i class="fa-solid fa-spinner fa-spin"></i>&nbsp;読み込み中...</div>
-          <p class="ss-note">米国サーバー経由でのレンダリングです。ZenLinkが正常に動作している場合、海外ユーザー向けポップアップが表示されます。実際のブラウザ確認は <a href="https://www.browserling.com" target="_blank">Browserling</a> をご利用ください。</p>
-        </div>
-        ${popupPane}
-      </div>
-    </div>`;
-
-    document.getElementById(id).outerHTML = card;
-
-    // load screenshot
-    const wrap = document.getElementById(ssImgId);
-    const img = new Image();
-    img.onload = () => {
-      wrap.innerHTML = '';
-      wrap.style.minHeight = '';
-      img.style.cssText = 'width:100%;display:block';
-      wrap.appendChild(img);
-      const b = document.createElement('div');
-      b.className = 'ss-badge'; b.textContent = '米国サーバー経由';
-      wrap.appendChild(b);
-    };
-    img.onerror = () => {
-      wrap.innerHTML = '<span style="color:var(--warn-text);font-size:12px"><i class="fa-solid fa-triangle-exclamation"></i>&nbsp;スクリーンショットの取得に失敗しました</span>';
-    };
-    img.src = `https://shot.screenshotapi.net/screenshot?token=${SS_TOKEN}&url=${encodeURIComponent(url)}&output=image&width=1280&height=800&delay=2500`;
-
+    const html = await fetchHtml(url);
+    const analysis = analyzeTag(html);
+    const platform = detectPlatform(html);
+    renderCard(url, analysis, platform);
   } catch(e) {
-    document.getElementById(id).outerHTML = `<div class="result-card" id="${id}">
+    const el = document.getElementById(id);
+    if (el) el.outerHTML = `<div class="result-card" id="${id}">
       <div class="rh">
         <span class="badge badge-ng">エラー</span>
         <div class="rurl"><a href="${url}" target="_blank">${url}</a></div>
       </div>
-      <div class="rb"><ul class="issue-list"><li>ページの取得に失敗しました。URLを確認してください。</li></ul></div>
+      <div class="rb"><ul class="issue-list"><li>${e.message || 'ページの取得に失敗しました。URLを確認してください。'}</li></ul></div>
     </div>`;
   }
 
@@ -301,7 +317,9 @@ JSON fields needed:
   btn.innerHTML = '<i class="fa-solid fa-magnifying-glass"></i> 確認する';
 }
 
-document.getElementById('urlInput').addEventListener('keydown', e => { if(e.key==='Enter') runCheck(); });
+document.getElementById('urlInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') runCheck();
+});
 </script>
 </body>
 </html>
