@@ -101,6 +101,25 @@ const PLATFORMS = {
   aiship:     {name:'aiship',          guide:'https://support.zen.one/zenlink-guide/tag/aiship'},
 };
 
+async function decodeHtml(resp) {
+  // レスポンスのバイト列を取得して文字コードを判定・デコード
+  const buf = await resp.arrayBuffer();
+  const bytes = new Uint8Array(buf);
+  // まずバイト列からcharsetを検出（meta tagより）
+  const sniff = new TextDecoder('utf-8', {fatal: false}).decode(bytes.slice(0, 2000));
+  const charsetMatch = sniff.match(/charset[=:"\s]+([\w-]+)/i);
+  const charset = charsetMatch ? charsetMatch[1].toLowerCase().replace('_', '-') : 'utf-8';
+  // EUC-JP系は明示的にデコード
+  const encoding = (charset.includes('euc') || charset === 'x-euc-jp') ? 'euc-jp'
+                 : (charset.includes('shift') || charset === 'sjis') ? 'shift-jis'
+                 : 'utf-8';
+  try {
+    return new TextDecoder(encoding).decode(bytes);
+  } catch(e) {
+    return new TextDecoder('utf-8', {fatal: false}).decode(bytes);
+  }
+}
+
 async function fetchHtml(url) {
   for (const proxyFn of PROXIES) {
     try {
@@ -109,11 +128,13 @@ async function fetchHtml(url) {
       if (!resp.ok) continue;
       const ct = resp.headers.get('content-type') || '';
       if (ct.includes('application/json')) {
+        // allorigins: JSON wrapper — contents already decoded as UTF-8 string
         const json = await resp.json();
         const html = json.contents || '';
         if (html.length > 100) return html;
       } else {
-        const html = await resp.text();
+        // 文字コードを考慮してデコード
+        const html = await decodeHtml(resp);
         if (html.length > 100) return html;
       }
     } catch(e) { continue; }
