@@ -79,7 +79,7 @@ h1{font-size:20px;font-weight:500;margin-bottom:6px;display:flex;align-items:cen
 const TARGET_SCRIPT = 'https://zen.one/analytics.js';
 const SS_TOKEN = 'EHT2X68-DG5M6MX-GDWFYBJ-S9PNSC5';
 
-const GAS_API = 'https://script.google.com/a/macros/zen.group/s/AKfycbwfUTptHayziqMpQhRtiDgjZ6Bb4qBqksta_0jtmNDr7PMVQwl9ImpI3Oh_oe8rBf_SAQ/exec';
+const PROXY_API = 'https://zenlink-proxy.karimori-m.workers.dev';
 
 const PLATFORMS = {
   shopify:    {name:'Shopify',         guide:'https://support.zen.one/zenlink-guide/tag/shopify'},
@@ -98,9 +98,9 @@ const PLATFORMS = {
 };
 
 async function fetchHtml(url) {
-  const apiUrl = GAS_API + '?url=' + encodeURIComponent(url);
+  const apiUrl = PROXY_API + '?url=' + encodeURIComponent(url);
   const resp = await fetch(apiUrl, {signal: AbortSignal.timeout(30000)});
-  if (!resp.ok) throw new Error('GAS API エラー: ' + resp.status);
+  if (!resp.ok) throw new Error('プロキシエラー: ' + resp.status);
   const data = await resp.json();
   if (data.error) throw new Error(data.error);
   if (!data.html || data.html.length < 100) throw new Error('HTMLの取得に失敗しました');
