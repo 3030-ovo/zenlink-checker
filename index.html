@@ -132,17 +132,17 @@ async function fetchHtml(url) {
 function detectPlatform(html) {
   const h = (html||'').toLowerCase();
   if(h.includes('cdn.shopify.com')||h.includes('myshopify.com')) return 'shopify';
-  if(h.includes('shop-pro.jp')) return 'colorme';
-  if(h.includes('base.shop')||h.includes('base-cdn.jp')) return 'base';
+  if(h.includes('shop-pro.jp')||h.includes('shop-pro.net')||h.includes('colormeapp')||h.includes('colorme')||h.includes('gmo-shop')) return 'colorme';
+  if(h.includes('base.shop')||h.includes('base-cdn.jp')||h.includes('thebase.in')) return 'base';
   if(h.includes('ecforce')) return 'ecforce';
   if(h.includes('ochanoko')) return 'ochanoko';
   if(h.includes('makeshop')) return 'makeshop';
   if(h.includes('futureshop')) return 'futureshop';
   if(h.includes('squarespace.com')) return 'square';
-  if(h.includes('wix.com')||h.includes('wixsite.com')) return 'wix';
+  if(h.includes('wix.com')||h.includes('wixsite.com')||h.includes('wix-bolt')) return 'wix';
   if(h.includes('eccube')||h.includes('ec-cube')) return 'eccube';
   if(h.includes('aiship')) return 'aiship';
-  if(h.includes('wp-content')||h.includes('wordpress')) return 'wordpress';
+  if(h.includes('wp-content')||h.includes('wordpress')||h.includes('wp-includes')) return 'wordpress';
   return null;
 }
 
@@ -180,7 +180,8 @@ function analyzeTag(html) {
   if (headMatch) {
     const hd = headMatch[0];
     if (!hd.includes('analytics.js')) {
-      issues.push('スクリプトが &lt;head&gt; 内ではなく body 等に挿入されています');
+      // ColorMe and some platforms inject via app — body placement is acceptable
+      issues.push('スクリプトが &lt;head&gt; 内ではなくアプリ/body 経由で挿入されています（プラットフォームによっては正常です）');
       if (status === 'ok') status = 'warn';
     } else if (hd.lastIndexOf('</head>') - hd.lastIndexOf('analytics.js') > 2000) {
       issues.push('スクリプトが &lt;head&gt; の上部に挿入されています（推奨: &lt;/head&gt; の直前）');
@@ -233,7 +234,7 @@ function renderCard(url, analysis, platform) {
       </div>
       <div class="tab-pane" id="${id}_p1">
         <div class="ss-wrap" id="${ssId}"><i class="fa-solid fa-spinner fa-spin"></i>&nbsp;読み込み中...</div>
-        <p class="ss-note">米国サーバー経由のレンダリングです。ZenLinkが正常に動作していれば、海外ユーザー向けポップアップが表示されます。<br>実際のブラウザ確認は <a href="https://www.browserling.com" target="_blank">Browserling</a> もご利用ください。</p>
+        <p class="ss-note"><i class="fa-solid fa-circle-info" style="color:var(--info-text);margin-right:4px"></i>確認まで数秒かかる場合があります。しばらくお待ちください。<br>米国サーバー経由でのレンダリング表示です。ZenLinkのポップアップ除外設定を行っている場合や、特定条件下では表示されないことがあります。<br>実際のブラウザでの確認は <a href="https://www.browserling.com" target="_blank">Browserling</a> もご利用ください。</p>
       </div>
       ${popupPane}
     </div>
