@@ -97,93 +97,57 @@ const PLATFORMS = {
   aiship:     {name:'aiship',          guide:'https://support.zen.one/zenlink-guide/tag/aiship'},
 };
 
-async function fetchHtml(url) {
+async function analyzeUrl(url) {
   const apiUrl = PROXY_API + '?url=' + encodeURIComponent(url);
   const resp = await fetch(apiUrl, {signal: AbortSignal.timeout(30000)});
   if (!resp.ok) throw new Error('プロキシエラー: ' + resp.status);
   const data = await resp.json();
   if (data.error) throw new Error(data.error);
-  if (!data.html || data.html.length < 100) throw new Error('HTMLの取得に失敗しました');
-  return data.html;
+  return data;
 }
 
-function detectPlatform(html) {
-  const h = (html || '').toLowerCase();
-  if (h.includes('cdn.shopify.com') || h.includes('myshopify.com')) return 'shopify';
-  if (h.includes('shop-pro.jp') || h.includes('shop-pro.net') || h.includes('colormeapp') || h.includes('gmo-shop')) return 'colorme';
-  if (h.includes('base.shop') || h.includes('base-cdn.jp') || h.includes('thebase.in')) return 'base';
-  if (h.includes('ecforce')) return 'ecforce';
-  if (h.includes('ochanoko')) return 'ochanoko';
-  if (h.includes('makeshop')) return 'makeshop';
-  if (h.includes('futureshop')) return 'futureshop';
-  if (h.includes('squarespace.com')) return 'square';
-  if (h.includes('wix.com') || h.includes('wixsite.com') || h.includes('wix-bolt')) return 'wix';
-  if (h.includes('eccube') || h.includes('ec-cube')) return 'eccube';
-  if (h.includes('aiship')) return 'aiship';
-  if (h.includes('wp-content') || h.includes('wp-includes')) return 'wordpress';
-  return null;
-}
 
-function analyzeTag(html) {
+
+function analyzeResult(data) {
   const issues = [];
   let status = 'ok';
-  const h = html || '';
 
-  // 1. そもそも zen.one/analytics への参照があるか
-  if (!h.toLowerCase().includes('zen.one/analytics')) {
+  // ColorMeはアプリ連携のためタグ不要
+  if (data.colorme) {
+    issues.push('ColorMeショップはアプリ連携によりタグの手動挿入は不要です。ZenLinkアプリが正常にインストールされていれば有効です。');
+    return {status: 'ok', issues};
+  }
+
+  if (!data.hasZenOne) {
     issues.push('スクリプトタグが見つかりません（未挿入）');
     return {status: 'ng', issues};
   }
 
-  // 2. ColorMe等の動的挿入パターンを確認
-  //    例: {"src":"https://zen.one/analytics.js?tokenxxx"}
-  const dynamicPattern = /["'](https:\/\/zen\.one\/analytics\.js[^"']*)['"]/gi;
-  const dynamicMatches = [...h.matchAll(dynamicPattern)].map(m => m[1]);
-  const isDynamic = dynamicMatches.length > 0;
+  const targetTags = data.scriptTags || [];
 
-  // 3. 通常の <script src="...analytics.js..."> タグを確認
-  const scriptTags = [...h.matchAll(/<script[^>]*>/gi)].map(m => m[0]);
-  const targetTags = scriptTags.filter(s => s.includes('analytics.js'));
-
-  if (isDynamic && targetTags.length === 0) {
-    // ColorMe方式：JS内で動的生成 → 正常
-    issues.push('正常: アプリ連携による動的挿入が確認できました');
-    return {status: 'ok', issues};
-  }
-
-  if (!isDynamic && targetTags.length === 0) {
+  if (targetTags.length === 0) {
     issues.push('zen.one/analytics.js への参照はありますが、認識できない形式で挿入されています');
     status = 'warn';
   }
 
-  // 4. 通常タグの詳細チェック
   targetTags.forEach(tag => {
     if (!tag.includes('async')) {
       issues.push('async 属性がありません（ページ表示速度に影響する可能性があります）');
       if (status === 'ok') status = 'warn';
     }
     const m = tag.match(/src\s*=\s*["']([^"']+)["']/i);
-    if (m) {
-      const src = m[1];
-      // クエリパラメータ付きも許容
-      if (!src.startsWith('https://zen.one/analytics.js')) {
-        issues.push(`src URL が正しくありません: ${src}`);
-        if (status === 'ok') status = 'warn';
-      }
+    if (m && !m[1].startsWith('https://zen.one/analytics.js')) {
+      issues.push(`src URL が正しくありません: ${m[1]}`);
+      if (status === 'ok') status = 'warn';
     }
   });
 
-  // 5. 挿入位置チェック（<head> 内かどうか）
-  const headMatch = h.match(/<head[\s\S]*?<\/head>/i);
-  if (headMatch) {
-    const hd = headMatch[0];
-    if (!hd.includes('analytics.js')) {
-      issues.push('スクリプトが &lt;head&gt; 内ではなく body 等に挿入されています（プラットフォームによっては正常な場合があります）');
-      if (status === 'ok') status = 'warn';
-    } else if (hd.lastIndexOf('</head>') - hd.lastIndexOf('analytics.js') > 2000) {
-      issues.push('スクリプトが &lt;head&gt; の上部に挿入されています（推奨: &lt;/head&gt; の直前）');
-      if (status === 'ok') status = 'warn';
-    }
+  if (!data.inHead) {
+    issues.push('スクリプトが &lt;head&gt; 内ではなく body 等に挿入されています（プラットフォームによっては正常な場合があります）');
+    if (status === 'ok') status = 'warn';
+  } else if (data.distFromHeadEnd > 2000) {
+    issues.push('スクリプトが &lt;head&gt; の上部に挿入されています（推奨: &lt;/head&gt; の直前）');
+    if (status === 'ok') status = 'warn';
   }
 
   if (status === 'ok') issues.push('正常: 推奨位置にスクリプトタグが確認できました');
@@ -285,9 +249,9 @@ async function runCheck() {
   else results.insertAdjacentHTML('afterbegin', placeholder);
 
   try {
-    const html = await fetchHtml(url);
-    const analysis = analyzeTag(html);
-    const platform = detectPlatform(html);
+    const data = await analyzeUrl(url);
+    const analysis = analyzeResult(data);
+    const platform = data.platform;
     renderCard(url, analysis, platform);
   } catch(e) {
     const el = document.getElementById(id);
