@@ -180,9 +180,11 @@ function analyzeTag(html) {
   if (headMatch) {
     const hd = headMatch[0];
     if (!hd.includes('analytics.js')) {
-      // ColorMe and some platforms inject via app — body placement is acceptable
-      issues.push('スクリプトが &lt;head&gt; 内ではなくアプリ/body 経由で挿入されています（プラットフォームによっては正常です）');
-      if (status === 'ok') status = 'warn';
+      // Dynamic injection may still be in head as JS — only warn if also no dynamic match
+      if (!isDynamic) {
+        issues.push('スクリプトが &lt;head&gt; 内ではなく body 等に挿入されています（プラットフォームによっては正常な場合があります）');
+        if (status === 'ok') status = 'warn';
+      }
     } else if (hd.lastIndexOf('</head>') - hd.lastIndexOf('analytics.js') > 2000) {
       issues.push('スクリプトが &lt;head&gt; の上部に挿入されています（推奨: &lt;/head&gt; の直前）');
       if (status === 'ok') status = 'warn';
